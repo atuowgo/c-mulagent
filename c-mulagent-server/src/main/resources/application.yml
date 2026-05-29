@@ -1,0 +1,34 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: c-mulagent-server
+  datasource:
+    url: jdbc:sqlite:data/cmulagent.db
+    driver-class-name: org.sqlite.JDBC
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+      continue-on-error: true
+
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
+
+logging:
+  level:
+    com.cmulagent: DEBUG
+    org.springframework.jdbc: INFO
+
+# SQLite WAL mode is enabled via DatabaseConfig
+# WebSocket is configured via WebSocketConfig
