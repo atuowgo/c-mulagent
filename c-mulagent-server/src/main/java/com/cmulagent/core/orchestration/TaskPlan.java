@@ -16,6 +16,9 @@ public class TaskPlan {
     private String name;
     private String description;
     private String status;
-    private int priority;
+    private Integer priority;
     private List<SubtaskPlan> subtasks;
+    private String createdAt;
+    private String updatedAt;
+    private String completedAt;
 }

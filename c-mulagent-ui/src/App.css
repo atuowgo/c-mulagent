@@ -366,6 +366,7 @@
 .log-level-info { color: var(--accent-blue); }
 .log-level-warn { color: var(--accent-orange); }
 .log-level-error { color: var(--accent-red); }
+.log-source { color: var(--text-muted); }
 
 /* Results page */
 .result-list {

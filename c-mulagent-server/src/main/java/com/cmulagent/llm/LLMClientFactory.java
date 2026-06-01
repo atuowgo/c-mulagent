@@ -1,5 +1,8 @@
 package com.cmulagent.llm;
 
+import org.springframework.stereotype.Component;
+
+@Component
 public class LLMClientFactory {
 
     public LLMClient createAnthropic(String apiKey, String model) {

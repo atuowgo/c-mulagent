@@ -1,7 +1,10 @@
 import { useEffect, useRef, useCallback } from 'react';
-import type { AgentEvent, WsMessage } from '../types/events';
+import type { AgentEvent } from '../types/events';
 import { useAgentStore } from '../stores/agentStore';
 import { useTaskStore } from '../stores/taskStore';
+import { useLogStore, type LogEntry } from '../stores/logStore';
+import { AgentState } from '../types/agent';
+import { TaskStatus } from '../types/task';
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -27,8 +30,8 @@ export function useWebSocket() {
 
     ws.onmessage = (event) => {
       try {
-        const msg: WsMessage = JSON.parse(event.data);
-        dispatchEvent(msg as unknown as AgentEvent);
+        const msg = JSON.parse(event.data) as AgentEvent;
+        dispatchEvent(msg);
       } catch (e) {
         console.warn('[WS] failed to parse message:', e);
       }
@@ -66,24 +69,47 @@ export function useWebSocket() {
 function dispatchEvent(event: AgentEvent) {
   const { updateAgentState } = useAgentStore.getState();
   const { updateTask, updateSubtask } = useTaskStore.getState();
+  const { addLog } = useLogStore.getState();
+  const d = event.data || {};
 
   switch (event.type) {
-    case 'agent_state_changed':
-      updateAgentState(event.payload.agentId, event.payload.state, event.payload.progress);
+    case 'AGENT_STATE_CHANGED':
+      updateAgentState(
+        String(d.agentId || ''),
+        (String(d.state || '') as AgentState) || AgentState.Idle,
+        Number(d.progress) || 0,
+      );
       break;
-    case 'task_progress':
-      if (event.payload.subtaskId) {
-        updateSubtask(event.payload.taskId, event.payload.subtaskId, event.payload.status, event.payload.progress);
+    case 'TASK_PROGRESS': {
+      const subtaskId = d.subtaskId ? String(d.subtaskId) : undefined;
+      if (subtaskId) {
+        updateSubtask(
+          String(d.taskPlanId || ''),
+          subtaskId,
+          (String(d.status || '') as TaskStatus) || TaskStatus.Pending,
+          Number(d.progress) || 0,
+        );
       } else {
-        updateTask(event.payload.taskId, event.payload.status, event.payload.progress);
+        updateTask(
+          String(d.taskPlanId || ''),
+          (String(d.status || '') as TaskStatus) || TaskStatus.Pending,
+          Number(d.progress) || 0,
+        );
       }
       break;
-    case 'task_completed':
-      updateTask(event.payload.taskId, event.payload.status, event.payload.progress);
+    }
+    case 'AGENT_TOOL_INVOKED':
+    case 'AGENT_TOOL_RESULT':
+    case 'AGENT_LOG':
+      addLog({
+        id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        time: event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString(),
+        level: (String(d.level || 'info') as LogEntry['level']) || 'info',
+        source: event.source || String(d.agentId || ''),
+        message: String(d.message || d.output || d.toolName || ''),
+      });
       break;
-    case 'task_failed':
-      updateTask(event.payload.taskId, event.payload.status, event.payload.progress);
-      break;
+    case 'RESOURCE_SLOT_CHANGED':
     default:
       break;
   }

@@ -17,6 +17,7 @@ public class AgentExecutionEntity {
     private String startTime;
     private String endTime;
     private Long durationMs;
+    private Long totalTokens;
     private String errorMessage;
     private String metadata;
     private String createdAt;

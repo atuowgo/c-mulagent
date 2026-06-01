@@ -66,7 +66,7 @@ export function Results() {
                       color: 'var(--text-secondary)',
                     }}
                   >
-                    <span>{st.name} (Agent: {st.agentId})</span>
+                    <span>{st.name} (Agent: {st.assignedAgent})</span>
                     <span className={`badge badge-${st.status}`}>
                       {statusLabels[st.status]} {st.progress}%
                     </span>

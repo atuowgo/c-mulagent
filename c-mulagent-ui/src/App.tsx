@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useUIStore, type PageKey } from './stores/uiStore';
 import { useWebSocket } from './hooks/useWebSocket';
 import { Layout } from './components/Layout';
@@ -6,6 +7,7 @@ import { Orchestrator } from './pages/Orchestrator';
 import { Results } from './pages/Results';
 import { Skills } from './pages/Skills';
 import { useAgentState } from './hooks/useAgentState';
+import { useAgentStore } from './stores/agentStore';
 import { AgentState } from './types/agent';
 import { AgentCard } from './components/AgentCard';
 import { useTaskStore } from './stores/taskStore';
@@ -20,7 +22,12 @@ const pageComponents: Record<PageKey, () => JSX.Element> = {
 
 export default function App() {
   const currentPage = useUIStore((s) => s.currentPage);
+  const fetchAgents = useAgentStore((s) => s.fetchAgents);
   useWebSocket();
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
 
   const PageComponent = pageComponents[currentPage] ?? Dashboard;
 
@@ -87,7 +94,7 @@ function DashboardRightPanel() {
       {tasks
         .flatMap((t) =>
           t.subtasks
-            .filter((st) => st.agentId === selectedAgent.id)
+            .filter((st) => st.assignedAgent === selectedAgent.id)
             .map((st) => ({ task: t, subtask: st }))
         )
         .map(({ task, subtask }) => (
@@ -95,7 +102,7 @@ function DashboardRightPanel() {
             {task.name} / {subtask.name}
           </div>
         ))}
-      {tasks.flatMap((t) => t.subtasks.filter((st) => st.agentId === selectedAgent.id)).length === 0 && (
+      {tasks.flatMap((t) => t.subtasks.filter((st) => st.assignedAgent === selectedAgent.id)).length === 0 && (
         <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>无关联任务</div>
       )}
     </div>

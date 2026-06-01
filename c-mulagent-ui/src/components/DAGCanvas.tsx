@@ -10,14 +10,15 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { AgentSpec } from '../types/agent';
+import { AgentState } from '../types/agent';
 
 function AgentNode({ data }: NodeProps) {
   const agent = data.agent as AgentSpec;
-  const stateChars: Record<string, string> = {
-    idle: '○',
-    running: '◉',
-    done: '●',
-    error: '✕',
+  const stateChars: Record<AgentState, string> = {
+    [AgentState.Idle]: '○',
+    [AgentState.Running]: '◉',
+    [AgentState.Done]: '●',
+    [AgentState.Error]: '✕',
   };
   return (
     <div
@@ -66,7 +67,7 @@ export function DAGCanvas({ agents }: Props) {
         id: `e-${agents[i].id}-${agents[i + 1].id}`,
         source: agents[i].id,
         target: agents[i + 1].id,
-        animated: agents[i].state === 'running',
+        animated: agents[i].state === AgentState.Running,
         style: { stroke: 'var(--text-muted)' },
       });
     }

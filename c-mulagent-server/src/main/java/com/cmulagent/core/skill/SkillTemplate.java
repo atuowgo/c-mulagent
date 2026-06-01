@@ -5,6 +5,9 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+import java.util.Map;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -16,4 +19,8 @@ public class SkillTemplate {
     private String category;
     private String promptTemplate;
     private String version;
+    private List<String> toolBindings;
+    private Map<String, Object> inputSchema;
+    private Map<String, Object> outputSchema;
+    private Boolean enabled;
 }

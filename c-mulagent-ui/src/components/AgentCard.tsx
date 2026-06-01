@@ -36,7 +36,7 @@ export function AgentCard({ agent, selected, onClick }: Props) {
         </div>
       </div>
       <div className="agent-card-skills">
-        {agent.skills.map((s) => (
+        {(agent.tools ?? []).map((s) => (
           <span key={s} className="badge badge-idle">{s}</span>
         ))}
       </div>

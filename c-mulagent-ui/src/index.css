@@ -109,3 +109,6 @@ input:focus, textarea:focus, select:focus {
 .badge-done { background: rgba(63, 185, 80, 0.15); color: var(--accent-green); }
 .badge-error { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }
 .badge-pending { background: rgba(210, 153, 34, 0.15); color: var(--accent-orange); }
+.badge-planning { background: rgba(163, 113, 247, 0.15); color: var(--accent-purple); }
+.badge-paused { background: var(--bg-tertiary); color: var(--text-muted); }
+.badge-failed { background: rgba(248, 81, 73, 0.15); color: var(--accent-red); }

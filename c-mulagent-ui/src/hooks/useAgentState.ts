@@ -4,6 +4,8 @@ import { AgentState } from '../types/agent';
 
 export function useAgentState(agentId?: string) {
   const agents = useAgentStore((s) => s.agents);
+  const loading = useAgentStore((s) => s.loading);
+  const error = useAgentStore((s) => s.error);
   const selectedAgentId = useAgentStore((s) => s.selectedAgentId);
   const selectAgent = useAgentStore((s) => s.selectAgent);
 
@@ -19,6 +21,8 @@ export function useAgentState(agentId?: string) {
 
   return {
     agents,
+    loading,
+    error,
     selectedAgent,
     selectAgent,
     stats: { idleCount, runningCount, doneCount, errorCount, total: agents.length },

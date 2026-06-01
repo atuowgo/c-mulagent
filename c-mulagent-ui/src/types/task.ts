@@ -9,21 +9,30 @@ export enum TaskStatus {
 
 export interface Subtask {
   id: string;
+  taskPlanId: string;
   name: string;
-  agentId: string;
+  description?: string;
   status: TaskStatus;
+  assignedAgent?: string;
+  inputData?: string;
+  outputData?: string;
+  priority: number;
+  dependencies: string[];
+  retryCount: number;
+  maxRetries: number;
   progress: number;
-  startTime?: number;
-  endTime?: number;
 }
 
 export interface TaskPlan {
   id: string;
   name: string;
+  description?: string;
   input: string;
   status: TaskStatus;
+  priority: number;
   progress: number;
   subtasks: Subtask[];
-  createdAt: number;
-  completedAt?: number;
+  createdAt: string;
+  updatedAt?: string;
+  completedAt?: string;
 }

@@ -3,15 +3,23 @@ import { NLInput } from '../components/NLInput';
 import { DAGCanvas } from '../components/DAGCanvas';
 import { LogViewer } from '../components/LogViewer';
 import { useAgentState } from '../hooks/useAgentState';
+import { useTaskStore } from '../stores/taskStore';
 
 export function Orchestrator() {
   const { agents } = useAgentState();
+  const { addTask, startTask, tasks, error } = useTaskStore();
   const [running, setRunning] = useState(false);
 
-  const handleSubmit = (text: string) => {
+  const handleSubmit = async (text: string) => {
     setRunning(true);
-    console.log('[Orchestrator] task submitted:', text);
-    setTimeout(() => setRunning(false), 5000);
+    try {
+      const task = await addTask(text);
+      if (task) {
+        await startTask(task.id);
+      }
+    } finally {
+      setRunning(false);
+    }
   };
 
   return (
