@@ -67,6 +67,8 @@ export const taskApi = {
   create: (description: string) => api.post<ApiResponse<TaskPlan>>('/tasks', { description }),
   start: (id: string) => api.post<ApiResponse<TaskPlan>>(`/tasks/${id}/start`, {}),
   cancel: (id: string) => api.post<ApiResponse<void>>(`/tasks/${id}/cancel`, {}),
+  deleteTask: (id: string) => api.delete<ApiResponse<{id: string; status: string}>>(`/tasks/${id}`),
+  retryTask: (id: string) => api.post<ApiResponse<{id: string; status: string; retriedCount: number}>>(`/tasks/${id}/retry`, {}),
   progress: (id: string) => api.get<ApiResponse<unknown>>(`/tasks/${id}/progress`),
 };
 
@@ -80,7 +82,9 @@ export const skillApi = {
 
 export const templateApi = {
   list: () => api.get<ApiResponse<ListResponse<unknown>>>('/templates'),
+  get: (id: string) => api.get<ApiResponse<unknown>>(`/templates/${id}`),
   create: (spec: unknown) => api.post<ApiResponse<unknown>>('/templates', spec),
+  update: (id: string, spec: unknown) => api.put<ApiResponse<unknown>>(`/templates/${id}`, spec),
   delete: (id: string) => api.delete<ApiResponse<void>>(`/templates/${id}`),
 };
 

@@ -1,8 +1,10 @@
 package com.cmulagent.core.agent;
 
 import com.cmulagent.context.ContextManager;
+import com.cmulagent.core.skill.SkillLoader;
+import com.cmulagent.core.skill.SkillTemplate;
 import com.cmulagent.core.tool.ToolRegistry;
-import com.cmulagent.event.WebSocketHandler;
+import com.cmulagent.event.AgentWebSocketHandler;
 import com.cmulagent.llm.LLMClient;
 import com.cmulagent.llm.LLMClientFactory;
 import com.cmulagent.persistence.AgentExecutionRepository;
@@ -29,19 +31,21 @@ public class AgentOrchestrator {
     private final AgentSpecRepository agentSpecRepository;
     private final ToolRegistry toolRegistry;
     private final ContextManager contextManager;
-    private final WebSocketHandler webSocketHandler;
+    private final AgentWebSocketHandler webSocketHandler;
     private final AgentExecutionRepository executionRepository;
     private final MessageRecordRepository messageRepository;
     private final ToolInvocationRepository toolInvocationRepository;
+    private final SkillLoader skillLoader;
 
     public AgentOrchestrator(LLMClientFactory llmClientFactory,
                              AgentSpecRepository agentSpecRepository,
                              ToolRegistry toolRegistry,
                              ContextManager contextManager,
-                             WebSocketHandler webSocketHandler,
+                             AgentWebSocketHandler webSocketHandler,
                              AgentExecutionRepository executionRepository,
                              MessageRecordRepository messageRepository,
-                             ToolInvocationRepository toolInvocationRepository) {
+                             ToolInvocationRepository toolInvocationRepository,
+                             SkillLoader skillLoader) {
         this.llmClientFactory = llmClientFactory;
         this.agentSpecRepository = agentSpecRepository;
         this.toolRegistry = toolRegistry;
@@ -50,6 +54,7 @@ public class AgentOrchestrator {
         this.executionRepository = executionRepository;
         this.messageRepository = messageRepository;
         this.toolInvocationRepository = toolInvocationRepository;
+        this.skillLoader = skillLoader;
     }
 
     public CompletableFuture<String> executeWithAgent(String agentSpecIdOrName, String subtaskId, String input) {
@@ -71,6 +76,36 @@ public class AgentOrchestrator {
             } catch (Exception e) {
                 log.error("Subtask {} execution failed by agent {}", subtaskId, spec.getName(), e);
                 throw new RuntimeException("Agent execution failed: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public CompletableFuture<String> executeWithSkill(String agentSpecIdOrName, String subtaskId,
+                                                       String input, String skillName) {
+        AgentSpecEntity specEntity = agentSpecRepository.findById(agentSpecIdOrName)
+                .or(() -> agentSpecRepository.findByName(agentSpecIdOrName))
+                .orElseThrow(() -> new IllegalArgumentException("Agent spec not found: " + agentSpecIdOrName));
+
+        SkillTemplate skill = skillLoader.loadByName(skillName);
+
+        AgentSpec spec = toAgentSpec(specEntity);
+        LLMClient llmClient = createLLMClient(specEntity);
+        AgentExecutor executor = new AgentExecutor(spec, llmClient, toolRegistry, contextManager,
+                webSocketHandler, executionRepository, messageRepository, toolInvocationRepository,
+                null, skill);
+
+        log.info("Dispatching subtask {} to agent {} ({}) with skill {}",
+                subtaskId, spec.getName(), spec.getId(), skillName);
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                String result = executor.execute(input);
+                log.info("Subtask {} completed by agent {} with skill {}",
+                        subtaskId, spec.getName(), skillName);
+                return result;
+            } catch (Exception e) {
+                log.error("Subtask {} execution failed by agent {} with skill {}",
+                        subtaskId, spec.getName(), skillName, e);
+                throw new RuntimeException("Agent skill execution failed: " + e.getMessage(), e);
             }
         });
     }

@@ -218,6 +218,74 @@ public class TaskController {
         });
     }
 
+    @DeleteMapping("/{id}")
+    public Mono<ResponseEntity<Map<String, Object>>> deleteTask(@PathVariable String id) {
+        return Mono.fromCallable(() -> {
+            log.info("Deleting task: {}", id);
+            Optional<TaskPlanEntity> entityOpt = taskPlanRepository.findById(id);
+            if (entityOpt.isEmpty()) {
+                return errorResponse(HttpStatus.NOT_FOUND, "Task not found: " + id);
+            }
+            // Cancel first if running
+            dispatcher.cancel(id);
+            // Delete subtasks
+            subtaskRepository.deleteByTaskPlanId(id);
+            // Delete task plan
+            taskPlanRepository.deleteById(id);
+
+            log.info("Task deleted: {}", id);
+            return successResponse(Map.of("id", id, "status", "DELETED"));
+        }).onErrorResume(e -> {
+            log.error("Failed to delete task: {}", id, e);
+            return Mono.just(errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage()));
+        });
+    }
+
+    @PostMapping("/{id}/retry")
+    public Mono<ResponseEntity<Map<String, Object>>> retryTask(@PathVariable String id) {
+        return Mono.fromCallable(() -> {
+            log.info("Retrying failed subtasks for task: {}", id);
+            Optional<TaskPlanEntity> entityOpt = taskPlanRepository.findById(id);
+            if (entityOpt.isEmpty()) {
+                return errorResponse(HttpStatus.NOT_FOUND, "Task not found: " + id);
+            }
+            TaskPlanEntity entity = entityOpt.get();
+            List<SubtaskEntity> subtasks = subtaskRepository.findByTaskPlanId(id);
+
+            // Find failed subtasks and reset them
+            List<SubtaskEntity> failedSubtasks = subtasks.stream()
+                .filter(s -> "FAILED".equals(s.getStatus()))
+                .collect(Collectors.toList());
+
+            if (failedSubtasks.isEmpty()) {
+                return successResponse(Map.of("id", id, "status", entity.getStatus(),
+                    "message", "No failed subtasks to retry"));
+            }
+
+            String now = LocalDateTime.now().toString();
+            for (SubtaskEntity se : failedSubtasks) {
+                se.setStatus("PENDING");
+                se.setRetryCount((se.getRetryCount() != null ? se.getRetryCount() : 0) + 1);
+                se.setOutputData(null);
+                se.setCompletedAt(null);
+                se.setUpdatedAt(now);
+                subtaskRepository.save(se);
+            }
+
+            // Re-dispatch the task
+            TaskPlan taskPlan = toDomain(entity, subtaskRepository.findByTaskPlanId(id));
+            dispatcher.dispatch(taskPlan);
+            taskPlanRepository.updateStatus(id, "RUNNING");
+
+            log.info("Task retry initiated: {}, {} subtasks reset", id, failedSubtasks.size());
+            return successResponse(Map.of("id", id, "status", "RUNNING",
+                "retriedCount", failedSubtasks.size()));
+        }).onErrorResume(e -> {
+            log.error("Failed to retry task: {}", id, e);
+            return Mono.just(errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage()));
+        });
+    }
+
     @GetMapping("/{id}/progress")
     public Mono<ResponseEntity<Map<String, Object>>> getTaskProgress(@PathVariable String id) {
         return Mono.fromCallable(() -> {

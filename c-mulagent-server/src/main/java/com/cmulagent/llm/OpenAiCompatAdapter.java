@@ -1,112 +1,93 @@
 package com.cmulagent.llm;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import okhttp3.Call;
-import okhttp3.Callback;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class OpenAiCompatAdapter implements LLMClient {
 
     private static final Logger log = LoggerFactory.getLogger(OpenAiCompatAdapter.class);
-    private static final MediaType JSON_MEDIA_TYPE = MediaType.parse("application/json; charset=utf-8");
     private static final ObjectMapper mapper = new ObjectMapper();
 
-    private final OkHttpClient httpClient;
     private final String endpoint;
     private final String apiKey;
     private final String model;
+    private final HttpClient httpClient;
+    private final ExecutorService executor;
 
     public OpenAiCompatAdapter(String endpoint, String apiKey, String model) {
-        this.endpoint = endpoint;
+        this.endpoint = endpoint + "/v1/chat/completions";
         this.apiKey = apiKey;
         this.model = model;
-        this.httpClient = new OkHttpClient.Builder()
-                .connectTimeout(30, TimeUnit.SECONDS)
-                .readTimeout(120, TimeUnit.SECONDS)
-                .writeTimeout(30, TimeUnit.SECONDS)
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(Duration.ofSeconds(30))
                 .build();
+        this.executor = Executors.newFixedThreadPool(4);
     }
 
     @Override
     public CompletableFuture<String> chat(String systemPrompt, List<Message> messages) {
         log.debug("OpenAI-compat request: endpoint={}, model={}, messageCount={}", endpoint, model, messages.size());
 
-        CompletableFuture<String> future = new CompletableFuture<>();
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                List<Map<String, String>> msgList = new ArrayList<>(messages.size() + 1);
+                msgList.add(Map.of("role", "system", "content", systemPrompt));
+                for (LLMClient.Message msg : messages) {
+                    msgList.add(Map.of("role", msg.role(), "content", msg.content()));
+                }
 
-        try {
-            ObjectNode body = mapper.createObjectNode();
-            body.put("model", model);
-            body.put("temperature", 0.7);
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("model", model);
+                body.put("messages", msgList);
+                body.put("max_tokens", 4096);
+                body.put("temperature", 0.7);
 
-            ArrayNode msgArray = mapper.createArrayNode();
-            ObjectNode sysMsg = mapper.createObjectNode();
-            sysMsg.put("role", "system");
-            sysMsg.put("content", systemPrompt);
-            msgArray.add(sysMsg);
+                String json = mapper.writeValueAsString(body);
 
-            for (LLMClient.Message msg : messages) {
-                ObjectNode m = mapper.createObjectNode();
-                m.put("role", msg.role());
-                m.put("content", msg.content());
-                msgArray.add(m);
+                HttpRequest request = HttpRequest.newBuilder()
+                        .uri(URI.create(endpoint))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", "Bearer " + apiKey)
+                        .POST(HttpRequest.BodyPublishers.ofString(json))
+                        .timeout(Duration.ofSeconds(120))
+                        .build();
+
+                HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+                if (response.statusCode() != 200) {
+                    log.error("OpenAI-compat API error: status={}, body={}", response.statusCode(), response.body());
+                    throw new RuntimeException("OpenAI-compat API returned status " + response.statusCode() + ": " + response.body());
+                }
+
+                @SuppressWarnings("unchecked")
+                Map<String, Object> respMap = mapper.readValue(response.body(), Map.class);
+                List<Map<String, Object>> choices = (List<Map<String, Object>>) respMap.get("choices");
+                if (choices == null || choices.isEmpty()) {
+                    throw new RuntimeException("OpenAI-compat API returned empty choices");
+                }
+                Map<String, Object> message = (Map<String, Object>) choices.get(0).get("message");
+                String content = (String) message.get("content");
+
+                log.debug("OpenAI-compat response: length={}", content != null ? content.length() : 0);
+                return content;
+            } catch (Exception e) {
+                log.error("OpenAI-compat API call failed: endpoint={}, model={}", endpoint, model, e);
+                throw new RuntimeException("OpenAI-compat API call failed: " + e.getMessage(), e);
             }
-            body.set("messages", msgArray);
-
-            Request request = new Request.Builder()
-                    .url(endpoint + "/v1/chat/completions")
-                    .header("Authorization", "Bearer " + apiKey)
-                    .header("Content-Type", "application/json")
-                    .post(RequestBody.create(mapper.writeValueAsString(body), JSON_MEDIA_TYPE))
-                    .build();
-
-            httpClient.newCall(request).enqueue(new Callback() {
-                @Override
-                public void onResponse(Call call, Response response) throws IOException {
-                    try (response) {
-                        if (!response.isSuccessful()) {
-                            String errorBody = response.body() != null ? response.body().string() : "no body";
-                            log.error("OpenAI-compat HTTP {}: {}", response.code(), errorBody);
-                            future.completeExceptionally(
-                                    new RuntimeException("OpenAI-compat API returned HTTP " + response.code() + ": " + errorBody));
-                            return;
-                        }
-
-                        String responseBody = response.body() != null ? response.body().string() : "";
-                        JsonNode root = mapper.readTree(responseBody);
-                        String content = root.at("/choices/0/message/content").asText();
-                        log.debug("OpenAI-compat response: length={}", content.length());
-                        future.complete(content);
-                    } catch (Exception e) {
-                        log.error("OpenAI-compat response parsing failed", e);
-                        future.completeExceptionally(new RuntimeException("OpenAI-compat response parsing failed: " + e.getMessage(), e));
-                    }
-                }
-
-                @Override
-                public void onFailure(Call call, IOException e) {
-                    log.error("OpenAI-compat request failed", e);
-                    future.completeExceptionally(new RuntimeException("OpenAI-compat request failed: " + e.getMessage(), e));
-                }
-            });
-        } catch (Exception e) {
-            log.error("OpenAI-compat request building failed", e);
-            future.completeExceptionally(e);
-        }
-
-        return future;
+        }, executor);
     }
 }

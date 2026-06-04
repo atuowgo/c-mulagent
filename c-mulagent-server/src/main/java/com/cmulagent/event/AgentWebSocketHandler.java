@@ -9,9 +9,9 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.Sinks;
 
-public class WebSocketHandler implements WebSocketHandler {
+public class AgentWebSocketHandler implements WebSocketHandler {
 
-    private static final Logger log = LoggerFactory.getLogger(WebSocketHandler.class);
+    private static final Logger log = LoggerFactory.getLogger(AgentWebSocketHandler.class);
 
     private final Sinks.Many<AgentEvent> eventSink = Sinks.many().multicast().onBackpressureBuffer();
     private final ObjectMapper objectMapper = new ObjectMapper();

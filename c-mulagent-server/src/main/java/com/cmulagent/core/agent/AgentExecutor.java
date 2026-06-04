@@ -1,11 +1,12 @@
 package com.cmulagent.core.agent;
 
 import com.cmulagent.context.ContextManager;
+import com.cmulagent.core.skill.SkillTemplate;
 import com.cmulagent.core.tool.ToolExecutionException;
 import com.cmulagent.core.tool.ToolRegistry;
 import com.cmulagent.event.AgentEvent;
 import com.cmulagent.event.AgentEventType;
-import com.cmulagent.event.WebSocketHandler;
+import com.cmulagent.event.AgentWebSocketHandler;
 import com.cmulagent.llm.LLMClient;
 import com.cmulagent.llm.LLMClient.Message;
 import com.cmulagent.persistence.AgentExecutionEntity;
@@ -39,23 +40,54 @@ public class AgentExecutor {
     private final LLMClient llmClient;
     private final ToolRegistry toolRegistry;
     private final ContextManager contextManager;
-    private final WebSocketHandler webSocketHandler;
+    private final AgentWebSocketHandler webSocketHandler;
     private final AgentExecutionRepository executionRepository;
     private final MessageRecordRepository messageRepository;
     private final ToolInvocationRepository toolInvocationRepository;
 
     private volatile AgentState state = AgentState.IDLE;
     private final String executionId;
+    private final String taskPlanId;
+    private final SkillTemplate activeSkill;
 
     public AgentExecutor(
             AgentSpec agentSpec,
             LLMClient llmClient,
             ToolRegistry toolRegistry,
             ContextManager contextManager,
-            WebSocketHandler webSocketHandler,
+            AgentWebSocketHandler webSocketHandler,
             AgentExecutionRepository executionRepository,
             MessageRecordRepository messageRepository,
             ToolInvocationRepository toolInvocationRepository) {
+        this(agentSpec, llmClient, toolRegistry, contextManager, webSocketHandler,
+                executionRepository, messageRepository, toolInvocationRepository, null, null);
+    }
+
+    public AgentExecutor(
+            AgentSpec agentSpec,
+            LLMClient llmClient,
+            ToolRegistry toolRegistry,
+            ContextManager contextManager,
+            AgentWebSocketHandler webSocketHandler,
+            AgentExecutionRepository executionRepository,
+            MessageRecordRepository messageRepository,
+            ToolInvocationRepository toolInvocationRepository,
+            String taskPlanId) {
+        this(agentSpec, llmClient, toolRegistry, contextManager, webSocketHandler,
+                executionRepository, messageRepository, toolInvocationRepository, taskPlanId, null);
+    }
+
+    public AgentExecutor(
+            AgentSpec agentSpec,
+            LLMClient llmClient,
+            ToolRegistry toolRegistry,
+            ContextManager contextManager,
+            AgentWebSocketHandler webSocketHandler,
+            AgentExecutionRepository executionRepository,
+            MessageRecordRepository messageRepository,
+            ToolInvocationRepository toolInvocationRepository,
+            String taskPlanId,
+            SkillTemplate activeSkill) {
         this.agentSpec = agentSpec;
         this.llmClient = llmClient;
         this.toolRegistry = toolRegistry;
@@ -65,6 +97,8 @@ public class AgentExecutor {
         this.messageRepository = messageRepository;
         this.toolInvocationRepository = toolInvocationRepository;
         this.executionId = UUID.randomUUID().toString();
+        this.taskPlanId = taskPlanId;
+        this.activeSkill = activeSkill;
     }
 
     public String getExecutionId() {
@@ -245,6 +279,17 @@ public class AgentExecutor {
         sb.append("You are an AI agent with the following role:\n");
         sb.append(agentSpec.getRole()).append("\n\n");
 
+        if (activeSkill != null) {
+            sb.append("## Active Skill: ").append(activeSkill.getName()).append("\n");
+            if (activeSkill.getDescription() != null && !activeSkill.getDescription().isBlank()) {
+                sb.append(activeSkill.getDescription()).append("\n");
+            }
+            if (activeSkill.getPromptTemplate() != null && !activeSkill.getPromptTemplate().isBlank()) {
+                sb.append(activeSkill.getPromptTemplate()).append("\n");
+            }
+            sb.append("\n");
+        }
+
         List<com.cmulagent.core.tool.ToolSpec> availableTools = getAvailableTools();
         if (!availableTools.isEmpty()) {
             sb.append("You have access to the following tools:\n");
@@ -268,18 +313,33 @@ public class AgentExecutor {
         }
 
         sb.append("Context data from shared memory:\n");
-        sb.append(toJson(contextManager.getMap()));
+        if (taskPlanId != null) {
+            sb.append(toJson(contextManager.getMergedMap(taskPlanId)));
+        } else {
+            sb.append(toJson(contextManager.getMap()));
+        }
 
         return sb.toString();
     }
 
     private List<com.cmulagent.core.tool.ToolSpec> getAvailableTools() {
         List<com.cmulagent.core.tool.ToolSpec> allSpecs = toolRegistry.getSpecs();
-        if (agentSpec.getTools() == null || agentSpec.getTools().isEmpty()) {
+
+        List<String> allowedTools = null;
+
+        if (activeSkill != null && activeSkill.getToolBindings() != null
+                && !activeSkill.getToolBindings().isEmpty()) {
+            allowedTools = activeSkill.getToolBindings();
+        } else if (agentSpec.getTools() != null && !agentSpec.getTools().isEmpty()) {
+            allowedTools = agentSpec.getTools();
+        }
+
+        if (allowedTools == null) {
             return allSpecs;
         }
+        final List<String> finalAllowedTools = allowedTools;
         return allSpecs.stream()
-                .filter(spec -> agentSpec.getTools().contains(spec.getName()))
+                .filter(spec -> finalAllowedTools.contains(spec.getName()))
                 .collect(Collectors.toList());
     }
 

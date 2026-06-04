@@ -104,4 +104,8 @@ public class SubtaskRepository {
     public void deleteById(String id) {
         jdbcTemplate.update("DELETE FROM subtask WHERE id = ?", id);
     }
+
+    public void deleteByTaskPlanId(String taskPlanId) {
+        jdbcTemplate.update("DELETE FROM subtask WHERE task_plan_id = ?", taskPlanId);
+    }
 }

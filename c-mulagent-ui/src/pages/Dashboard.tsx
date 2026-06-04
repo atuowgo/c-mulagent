@@ -1,18 +1,31 @@
 import { AgentCard } from '../components/AgentCard';
 import { TaskProgress } from '../components/TaskProgress';
+import { ErrorBanner } from '../components/ErrorBanner';
 import { useAgentState } from '../hooks/useAgentState';
+import { useAgentStore } from '../stores/agentStore';
 import { useTaskStore } from '../stores/taskStore';
 
 export function Dashboard() {
   const { agents, selectedAgent, selectAgent, stats } = useAgentState();
   const tasks = useTaskStore((s) => s.tasks);
+  const agentError = useAgentStore((s) => s.error);
+  const taskError = useTaskStore((s) => s.error);
+  const fetchAgents = useAgentStore((s) => s.fetchAgents);
+  const fetchTasks = useTaskStore((s) => s.fetchTasks);
 
   return (
-    <div>
+    <div className="app-page-scroll">
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>仪表盘</h2>
       <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 8 }}>
         Agent状态总览与当前任务进度
       </p>
+
+      {agentError && (
+        <ErrorBanner message={agentError} onRetry={fetchAgents} />
+      )}
+      {taskError && (
+        <ErrorBanner message={taskError} onRetry={fetchTasks} />
+      )}
 
       <div className="dashboard-stats">
         <div className="stat-card">

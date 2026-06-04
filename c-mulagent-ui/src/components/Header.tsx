@@ -4,6 +4,7 @@ const pageTitles: Record<PageKey, string> = {
   dashboard: '仪表盘',
   orchestrator: '任务编排',
   results: '运行结果',
+  templates: '模板市场',
   skills: 'Skill库',
 };
 

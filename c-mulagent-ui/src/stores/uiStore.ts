@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type PageKey = 'dashboard' | 'orchestrator' | 'results' | 'skills';
+export type PageKey = 'dashboard' | 'orchestrator' | 'results' | 'templates' | 'skills';
 
 interface UIStore {
   currentPage: PageKey;

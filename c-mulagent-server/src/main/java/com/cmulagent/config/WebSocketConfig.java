@@ -1,6 +1,6 @@
 package com.cmulagent.config;
 
-import com.cmulagent.event.WebSocketHandler;
+import com.cmulagent.event.AgentWebSocketHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.reactive.HandlerMapping;
@@ -13,12 +13,12 @@ import java.util.Map;
 public class WebSocketConfig {
 
     @Bean
-    public WebSocketHandler webSocketHandler() {
-        return new WebSocketHandler();
+    public AgentWebSocketHandler agentWebSocketHandler() {
+        return new AgentWebSocketHandler();
     }
 
     @Bean
-    public HandlerMapping webSocketHandlerMapping(WebSocketHandler handler) {
+    public HandlerMapping webSocketHandlerMapping(AgentWebSocketHandler handler) {
         SimpleUrlHandlerMapping mapping = new SimpleUrlHandlerMapping();
         mapping.setUrlMap(Map.of("/ws/events", handler));
         mapping.setOrder(-1);

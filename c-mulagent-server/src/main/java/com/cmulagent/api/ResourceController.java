@@ -1,5 +1,7 @@
 package com.cmulagent.api;
 
+import com.cmulagent.resource.EndpointLoadBalancer;
+import com.cmulagent.resource.ResourceSlot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -9,8 +11,6 @@ import reactor.core.publisher.Mono;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @RestController
 @RequestMapping("/api/resources")
@@ -18,25 +18,26 @@ public class ResourceController {
 
     private static final Logger log = LoggerFactory.getLogger(ResourceController.class);
 
+    private final EndpointLoadBalancer loadBalancer;
+
+    public ResourceController(EndpointLoadBalancer loadBalancer) {
+        this.loadBalancer = loadBalancer;
+    }
+
     @GetMapping("/slots")
     public Mono<ResponseEntity<Map<String, Object>>> listResourceSlots() {
         return Mono.fromCallable(() -> {
             log.info("Listing resource slots");
-            List<Map<String, Object>> slots = IntStream.range(0, 4).mapToObj(i -> {
-                Map<String, Object> slot = new LinkedHashMap<>();
-                slot.put("id", "slot-" + (i + 1));
-                slot.put("name", "Resource Slot " + (i + 1));
-                slot.put("status", i < 2 ? "IDLE" : "BUSY");
-                slot.put("assignedAgent", i < 2 ? null : "agent-" + (i + 1));
-                slot.put("maxConcurrency", 1);
-                slot.put("currentLoad", i < 2 ? 0 : 1);
-                return slot;
-            }).collect(Collectors.toList());
+            List<ResourceSlot> allSlots = loadBalancer.getAllSlots();
+            List<Map<String, Object>> slotMaps = new ArrayList<>();
+            for (ResourceSlot slot : allSlots) {
+                slotMaps.add(slotToMap(slot));
+            }
 
             Map<String, Object> data = new LinkedHashMap<>();
-            data.put("items", slots);
-            data.put("total", slots.size());
-            data.put("availableSlots", slots.stream().filter(s -> "IDLE".equals(s.get("status"))).count());
+            data.put("items", slotMaps);
+            data.put("total", slotMaps.size());
+            data.put("availableSlots", allSlots.stream().filter(ResourceSlot::isAvailable).count());
             return successResponse(data);
         }).onErrorResume(e -> {
             log.error("Failed to list resource slots", e);
@@ -48,23 +49,11 @@ public class ResourceController {
     public Mono<ResponseEntity<Map<String, Object>>> getResourceSlot(@PathVariable String id) {
         return Mono.fromCallable(() -> {
             log.info("Fetching resource slot: {}", id);
-            int index = -1;
-            try {
-                index = Integer.parseInt(id.replace("slot-", ""));
-            } catch (NumberFormatException ignored) {
-            }
-            if (index < 1 || index > 4) {
+            ResourceSlot slot = loadBalancer.getSlot(id);
+            if (slot == null) {
                 return errorResponse(HttpStatus.NOT_FOUND, "Resource slot not found: " + id);
             }
-
-            Map<String, Object> slot = new LinkedHashMap<>();
-            slot.put("id", id);
-            slot.put("name", "Resource Slot " + index);
-            slot.put("status", index <= 2 ? "IDLE" : "BUSY");
-            slot.put("assignedAgent", index <= 2 ? null : "agent-" + index);
-            slot.put("maxConcurrency", 1);
-            slot.put("currentLoad", index <= 2 ? 0 : 1);
-            return successResponse(slot);
+            return successResponse(slotToMap(slot));
         }).onErrorResume(e -> {
             log.error("Failed to fetch resource slot: {}", id, e);
             return Mono.just(errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage()));
@@ -77,20 +66,44 @@ public class ResourceController {
             log.info("Health check requested");
             String uptime = getUptime();
 
+            List<ResourceSlot> allSlots = loadBalancer.getAllSlots();
+            long availableCount = allSlots.stream().filter(ResourceSlot::isAvailable).count();
+            int totalCapacity = allSlots.stream().mapToInt(ResourceSlot::getMaxCapacity).sum();
+            int totalUsed = allSlots.stream().mapToInt(ResourceSlot::getUsedCapacity).sum();
+
+            Map<String, Object> services = new LinkedHashMap<>();
+            services.put("database", "UP");
+            services.put("agents", "UP");
+            services.put("tools", "UP");
+            services.put("loadBalancer", Map.of(
+                    "status", "UP",
+                    "totalSlots", allSlots.size(),
+                    "availableSlots", availableCount,
+                    "totalCapacity", totalCapacity,
+                    "totalUsed", totalUsed
+            ));
+
             Map<String, Object> data = new LinkedHashMap<>();
             data.put("status", "UP");
             data.put("timestamp", LocalDateTime.now().toString());
             data.put("uptime", uptime);
-            data.put("services", Map.of(
-                    "database", "UP",
-                    "agents", "UP",
-                    "tools", "UP"
-            ));
+            data.put("services", services);
             return successResponse(data);
         }).onErrorResume(e -> {
             log.error("Health check failed", e);
             return Mono.just(errorResponse(HttpStatus.INTERNAL_SERVER_ERROR, e.getMessage()));
         });
+    }
+
+    private Map<String, Object> slotToMap(ResourceSlot slot) {
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("id", slot.getId());
+        map.put("name", slot.getName());
+        map.put("type", slot.getType());
+        map.put("maxCapacity", slot.getMaxCapacity());
+        map.put("usedCapacity", slot.getUsedCapacity());
+        map.put("available", slot.isAvailable());
+        return map;
     }
 
     private String getUptime() {

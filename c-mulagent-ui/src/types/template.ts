@@ -1,12 +1,12 @@
-export interface Skill {
+export interface TaskTemplate {
   id: string;
   name: string;
   description: string;
   category?: string;
-  promptTemplate?: string;
+  planTemplate: string;
+  agentBindings?: unknown;
+  skillBindings?: unknown;
   toolBindings?: unknown;
-  inputSchema?: unknown;
-  outputSchema?: unknown;
   version: string;
   enabled: boolean;
   createdAt: string;

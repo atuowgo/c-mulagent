@@ -3,7 +3,7 @@ package com.cmulagent.core.orchestration;
 import com.cmulagent.core.agent.AgentOrchestrator;
 import com.cmulagent.event.AgentEvent;
 import com.cmulagent.event.AgentEventType;
-import com.cmulagent.event.WebSocketHandler;
+import com.cmulagent.event.AgentWebSocketHandler;
 import com.cmulagent.persistence.SubtaskEntity;
 import com.cmulagent.persistence.SubtaskRepository;
 import com.cmulagent.persistence.TaskPlanEntity;
@@ -34,14 +34,14 @@ public class Dispatcher {
     private final AgentOrchestrator agentOrchestrator;
     private final SubtaskRepository subtaskRepository;
     private final TaskPlanRepository taskPlanRepository;
-    private final WebSocketHandler webSocketHandler;
+    private final AgentWebSocketHandler webSocketHandler;
 
     private final Set<String> cancelledPlanIds = ConcurrentHashMap.newKeySet();
 
     public Dispatcher(AgentOrchestrator agentOrchestrator,
                       SubtaskRepository subtaskRepository,
                       TaskPlanRepository taskPlanRepository,
-                      WebSocketHandler webSocketHandler) {
+                      AgentWebSocketHandler webSocketHandler) {
         this.agentOrchestrator = agentOrchestrator;
         this.subtaskRepository = subtaskRepository;
         this.taskPlanRepository = taskPlanRepository;
@@ -163,6 +163,14 @@ public class Dispatcher {
 
                 log.info("Retrying subtask {} (attempt {}/{})", subtask.getId(),
                         subtask.getRetryCount(), maxRetries);
+
+                emitEvent(AgentEventType.TASK_PROGRESS, subtask.getId(),
+                        Map.of("taskPlanId", taskPlan.getId(), "subtaskId", subtask.getId(),
+                                "status", "RETRYING", "subtaskName", subtask.getName(),
+                                "retryCount", subtask.getRetryCount(),
+                                "maxRetries", maxRetries,
+                                "error", errorMsg != null ? errorMsg : "unknown error"));
+
                 executeSubtask(subtask, taskPlan);
             } else {
                 String failNow = nowStr();
@@ -178,6 +186,7 @@ public class Dispatcher {
                 emitEvent(AgentEventType.TASK_PROGRESS, subtask.getId(),
                         Map.of("taskPlanId", taskPlan.getId(), "subtaskId", subtask.getId(),
                                 "status", "FAILED", "subtaskName", subtask.getName(),
+                                "retryCount", retryCount, "maxRetries", maxRetries,
                                 "error", errorMsg));
 
                 checkAndDispatchNext(taskPlan);

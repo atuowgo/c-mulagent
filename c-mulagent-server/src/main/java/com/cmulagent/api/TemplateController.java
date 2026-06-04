@@ -85,8 +85,12 @@ public class TemplateController {
                         item.put("name", e.getName());
                         item.put("description", e.getDescription());
                         item.put("category", e.getCategory());
+                        item.put("planTemplate", e.getPlanTemplate());
                         item.put("version", e.getVersion());
                         item.put("enabled", e.getEnabled());
+                        item.put("agentBindings", parseJson(e.getAgentBindings()));
+                        item.put("skillBindings", parseJson(e.getSkillBindings()));
+                        item.put("toolBindings", parseJson(e.getToolBindings()));
                         item.put("createdAt", e.getCreatedAt());
                         item.put("updatedAt", e.getUpdatedAt());
                         return item;

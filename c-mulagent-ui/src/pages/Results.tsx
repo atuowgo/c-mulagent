@@ -16,7 +16,7 @@ export function Results() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   return (
-    <div>
+    <div className="app-page-scroll">
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>运行结果</h2>
       <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 16 }}>
         查看所有已执行任务的结果与子产物

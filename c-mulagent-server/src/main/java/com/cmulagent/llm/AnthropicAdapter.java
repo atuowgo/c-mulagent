@@ -1,6 +1,7 @@
 package com.cmulagent.llm;
 
 import com.anthropic.client.AnthropicClient;
+import com.anthropic.client.okhttp.AnthropicOkHttpClient;
 import com.anthropic.models.messages.MessageCreateParams;
 import com.anthropic.models.messages.MessageParam;
 import org.slf4j.Logger;
@@ -22,10 +23,10 @@ public class AnthropicAdapter implements LLMClient {
 
     public AnthropicAdapter(String apiKey, String model) {
         this.model = model;
-        this.client = AnthropicClient.builder()
+        this.client = AnthropicOkHttpClient.builder()
                 .apiKey(apiKey)
                 .build();
-        this.executor = Executors.newVirtualThreadPerTaskExecutor();
+        this.executor = Executors.newFixedThreadPool(4);
     }
 
     @Override
@@ -36,8 +37,11 @@ public class AnthropicAdapter implements LLMClient {
             try {
                 List<MessageParam> messageParams = new ArrayList<>(messages.size());
                 for (LLMClient.Message msg : messages) {
+                    MessageParam.Role role = "assistant".equals(msg.role())
+                            ? MessageParam.Role.ASSISTANT
+                            : MessageParam.Role.USER;
                     messageParams.add(MessageParam.builder()
-                            .role(msg.role())
+                            .role(role)
                             .content(msg.content())
                             .build());
                 }
@@ -54,7 +58,7 @@ public class AnthropicAdapter implements LLMClient {
                 StringBuilder sb = new StringBuilder();
                 for (var block : response.content()) {
                     if (block.isText()) {
-                        sb.append(block.asText().get().text());
+                        sb.append(block.asText().text());
                     }
                 }
                 String content = sb.toString();

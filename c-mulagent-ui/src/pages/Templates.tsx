@@ -1,70 +1,68 @@
 import { useEffect, useState } from 'react';
-import { useSkillStore } from '../stores/skillStore';
+import { useTemplateStore } from '../stores/templateStore';
 import { ErrorBanner } from '../components/ErrorBanner';
-import type { Skill } from '../types/skill';
+import type { TaskTemplate } from '../types/template';
 
-const CATEGORIES = ['通用', '代码审查', '测试', '文档', '部署', '分析'];
+const CATEGORIES = ['通用', '代码生成', '数据分析', '文档处理', '测试', '部署'];
 
-export function Skills() {
+export function Templates() {
   const {
-    skills, loading, error, selectedSkillId,
-    fetchSkills, createSkill, updateSkill, deleteSkill, selectSkill,
-  } = useSkillStore();
+    templates, loading, error, selectedTemplateId,
+    fetchTemplates, createTemplate, updateTemplate, deleteTemplate, selectTemplate,
+  } = useTemplateStore();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    name: '', description: '', category: '', promptTemplate: '',
-  });
+  const [form, setForm] = useState({ name: '', description: '', category: '', planTemplate: '' });
   const [filterCategory, setFilterCategory] = useState<string | null>(null);
 
-  useEffect(() => { fetchSkills(); }, [fetchSkills]);
+  useEffect(() => { fetchTemplates(); }, [fetchTemplates]);
 
   const filtered = filterCategory
-    ? skills.filter((s) => s.category === filterCategory)
-    : skills;
+    ? templates.filter((t) => t.category === filterCategory)
+    : templates;
 
-  const selectedSkill = skills.find((s) => s.id === selectedSkillId) ?? null;
+  const selectedTemplate = templates.find((t) => t.id === selectedTemplateId) ?? null;
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ name: '', description: '', category: '', promptTemplate: '' });
+    setForm({ name: '', description: '', category: '', planTemplate: '' });
     setShowForm(true);
   };
 
-  const openEdit = (s: Skill) => {
-    setEditingId(s.id);
+  const openEdit = (t: TaskTemplate) => {
+    setEditingId(t.id);
     setForm({
-      name: s.name,
-      description: s.description,
-      category: s.category ?? '',
-      promptTemplate: s.promptTemplate ?? '',
+      name: t.name,
+      description: t.description,
+      category: t.category ?? '',
+      planTemplate: t.planTemplate,
     });
     setShowForm(true);
   };
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) return;
+    if (!form.name.trim() || !form.planTemplate.trim()) return;
     if (editingId) {
-      await updateSkill(editingId, {
+      await updateTemplate(editingId, {
         name: form.name.trim(),
         description: form.description.trim(),
         category: form.category || undefined,
-        promptTemplate: form.promptTemplate.trim() || undefined,
+        planTemplate: form.planTemplate.trim(),
       });
     } else {
-      await createSkill({
+      await createTemplate({
         name: form.name.trim(),
         description: form.description.trim(),
         category: form.category || undefined,
-        promptTemplate: form.promptTemplate.trim() || undefined,
+        planTemplate: form.planTemplate.trim(),
       });
     }
     setShowForm(false);
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('确认删除此Skill？')) {
-      await deleteSkill(id);
+    if (window.confirm('确认删除此模板？')) {
+      await deleteTemplate(id);
     }
   };
 
@@ -72,12 +70,12 @@ export function Skills() {
     <div className="app-page-scroll">
       <div className="skills-page-header">
         <div>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>Skill库</h2>
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 4 }}>模板市场</h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-            管理Agent可用的技能模块，定义"做什么、怎么做"
+            预定义任务模板，快速复用常见任务流程
           </p>
         </div>
-        <button onClick={openCreate}>新建Skill</button>
+        <button onClick={openCreate}>新建模板</button>
       </div>
 
       {error && <ErrorBanner message={error} onDismiss={() => {}} />}
@@ -112,52 +110,50 @@ export function Skills() {
         <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>加载中...</p>
       ) : filtered.length === 0 ? (
         <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: 40 }}>
-          {filterCategory ? `暂无"${filterCategory}"分类的Skill` : '暂无Skill，点击"新建Skill"创建'}
+          {filterCategory ? `暂无"${filterCategory}"分类的模板` : '暂无模板，点击"新建模板"创建'}
         </div>
       ) : (
         <div className="skill-grid">
-          {filtered.map((s) => (
+          {filtered.map((t) => (
             <div
-              key={s.id}
-              className={`skill-card ${selectedSkillId === s.id ? 'selected' : ''}`}
-              onClick={() => selectSkill(s.id)}
+              key={t.id}
+              className={`skill-card ${selectedTemplateId === t.id ? 'selected' : ''}`}
+              onClick={() => selectTemplate(t.id)}
               style={{ cursor: 'pointer', position: 'relative' }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <div className="skill-card-name">{s.name}</div>
-                  {s.category && (
+                  <div className="skill-card-name">{t.name}</div>
+                  {t.category && (
                     <span style={{
                       display: 'inline-block', padding: '1px 6px', borderRadius: 10,
                       fontSize: 10, background: 'var(--bg-tertiary)', color: 'var(--text-secondary)',
                       marginBottom: 4,
                     }}>
-                      {s.category}
+                      {t.category}
                     </span>
                   )}
                 </div>
-                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>v{s.version}</span>
+                <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>v{t.version}</span>
               </div>
               <div className="skill-card-desc" style={{ marginBottom: 8 }}>
-                {s.description || '无描述'}
+                {t.description || '无描述'}
               </div>
-              {s.promptTemplate && (
-                <div style={{
-                  fontSize: 11, color: 'var(--text-muted)',
-                  background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: 4,
-                  maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis',
-                  whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-                  fontFamily: 'monospace',
-                }}>
-                  {s.promptTemplate.length > 120
-                    ? s.promptTemplate.slice(0, 120) + '...'
-                    : s.promptTemplate}
-                </div>
-              )}
+              <div style={{
+                fontSize: 11, color: 'var(--text-muted)',
+                background: 'var(--bg-primary)', padding: '6px 8px', borderRadius: 4,
+                maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis',
+                whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+                fontFamily: 'monospace',
+              }}>
+                {t.planTemplate.length > 120
+                  ? t.planTemplate.slice(0, 120) + '...'
+                  : t.planTemplate}
+              </div>
               <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
                 <button
                   style={{ padding: '2px 8px', fontSize: 11 }}
-                  onClick={(e) => { e.stopPropagation(); openEdit(s); }}
+                  onClick={(e) => { e.stopPropagation(); openEdit(t); }}
                 >
                   编辑
                 </button>
@@ -166,7 +162,7 @@ export function Skills() {
                     padding: '2px 8px', fontSize: 11,
                     background: 'transparent', border: '1px solid var(--accent-red)', color: 'var(--accent-red)',
                   }}
-                  onClick={(e) => { e.stopPropagation(); handleDelete(s.id); }}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(t.id); }}
                 >
                   删除
                 </button>
@@ -191,7 +187,7 @@ export function Skills() {
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ marginBottom: 16 }}>
-              {editingId ? '编辑Skill' : '新建Skill'}
+              {editingId ? '编辑模板' : '新建模板'}
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <div>
@@ -202,7 +198,7 @@ export function Skills() {
                   className="nl-input-field"
                   value={form.name}
                   onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  placeholder="Skill名称"
+                  placeholder="模板名称"
                 />
               </div>
               <div>
@@ -213,7 +209,7 @@ export function Skills() {
                   className="nl-input-field"
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  placeholder="Skill用途说明"
+                  placeholder="模板用途说明"
                 />
               </div>
               <div>
@@ -233,14 +229,19 @@ export function Skills() {
               </div>
               <div>
                 <label style={{ fontSize: 12, color: 'var(--text-secondary)', display: 'block', marginBottom: 4 }}>
-                  提示词模板
+                  模板内容 * (使用 {'{{'}description{'}}'} 作为任务描述占位符)
                 </label>
                 <textarea
                   className="nl-input-field"
-                  value={form.promptTemplate}
-                  onChange={(e) => setForm((f) => ({ ...f, promptTemplate: e.target.value }))}
-                  placeholder="定义Skill的系统提示词，可使用 {{variable}} 占位符"
-                  rows={6}
+                  value={form.planTemplate}
+                  onChange={(e) => setForm((f) => ({ ...f, planTemplate: e.target.value }))}
+                  placeholder={`示例：
+任务名称：代码审查
+子任务：
+1. 静态分析 - agent: code-analyzer - 对代码进行静态分析
+2. 安全检查 - agent: security-scanner - 依赖: 静态分析 - 扫描安全漏洞
+3. 生成报告 - agent: report-writer - 依赖: 静态分析, 安全检查 - 汇总结果`}
+                  rows={8}
                   style={{ fontFamily: 'monospace', fontSize: 12, resize: 'vertical' }}
                 />
               </div>
@@ -248,7 +249,10 @@ export function Skills() {
                 <button onClick={() => setShowForm(false)} style={{ background: 'var(--bg-tertiary)' }}>
                   取消
                 </button>
-                <button onClick={handleSubmit} disabled={!form.name.trim()}>
+                <button
+                  onClick={handleSubmit}
+                  disabled={!form.name.trim() || !form.planTemplate.trim()}
+                >
                   {editingId ? '保存' : '创建'}
                 </button>
               </div>

@@ -37,20 +37,24 @@ function toSubtask(raw: Record<string, unknown>): Subtask {
 interface TaskStore {
   tasks: TaskPlan[];
   selectedTaskId: string | null;
+  selectedSubtaskId: string | null;
   loading: boolean;
   error: string | null;
   fetchTasks: () => Promise<void>;
+  fetchTask: (id: string) => Promise<TaskPlan | null>;
   addTask: (description: string) => Promise<TaskPlan | null>;
   startTask: (id: string) => Promise<void>;
   cancelTask: (id: string) => Promise<void>;
   updateTask: (id: string, status: TaskStatus, progress: number) => void;
-  updateSubtask: (taskId: string, subtaskId: string, status: TaskStatus, progress: number) => void;
+  updateSubtask: (taskId: string, subtaskId: string, status: TaskStatus, progress: number, extra?: Partial<Subtask>) => void;
   selectTask: (id: string | null) => void;
+  selectSubtask: (id: string | null) => void;
 }
 
 export const useTaskStore = create<TaskStore>((set, get) => ({
   tasks: [],
   selectedTaskId: null,
+  selectedSubtaskId: null,
   loading: false,
   error: null,
 
@@ -84,14 +88,46 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
     }
   },
 
+  fetchTask: async (id) => {
+    try {
+      const res = await taskApi.get(id);
+      if (res.success && res.data) {
+        const raw = res.data as unknown as Record<string, unknown>;
+        const rawSubtasks = (raw.subtasks as Array<Record<string, unknown>>) ?? [];
+        const task: TaskPlan = {
+          id: raw.id as string,
+          name: raw.name as string,
+          description: raw.description as string | undefined,
+          input: raw.description as string ?? '',
+          status: normalizeStatus(raw.status as string),
+          priority: (raw.priority as number) ?? 5,
+          progress: (raw.progress as number) ?? 0,
+          subtasks: rawSubtasks.map(toSubtask),
+          createdAt: (raw.createdAt as string) ?? new Date().toISOString(),
+          updatedAt: raw.updatedAt as string | undefined,
+          completedAt: raw.completedAt as string | undefined,
+        };
+        set((s) => ({
+          tasks: s.tasks.map((t) => (t.id === id ? task : t)),
+        }));
+        return task;
+      }
+      return null;
+    } catch (e) {
+      console.error('Failed to fetch task:', e);
+      return null;
+    }
+  },
+
   addTask: async (description) => {
     set({ error: null });
     try {
       const res = await taskApi.create(description);
       if (res.success && res.data) {
         const raw = res.data as unknown as Record<string, unknown>;
+        const taskId = raw.id as string;
         const task: TaskPlan = {
-          id: raw.id as string,
+          id: taskId,
           name: raw.name as string,
           description: raw.description as string | undefined,
           input: description,
@@ -101,8 +137,11 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
           subtasks: [],
           createdAt: (raw.createdAt as string) ?? new Date().toISOString(),
         };
-        set((s) => ({ tasks: [task, ...s.tasks] }));
-        return task;
+        set((s) => ({ tasks: [task, ...s.tasks], selectedTaskId: taskId }));
+
+        // Fetch full task with subtasks from decomposition
+        const fullTask = await get().fetchTask(taskId);
+        return fullTask ?? task;
       } else {
         set({ error: res.error || 'Failed to create task' });
         return null;
@@ -158,19 +197,20 @@ export const useTaskStore = create<TaskStore>((set, get) => ({
       ),
     })),
 
-  updateSubtask: (taskId, subtaskId, status, progress) =>
+  updateSubtask: (taskId, subtaskId, status, progress, extra?: Partial<Subtask>) =>
     set((s) => ({
       tasks: s.tasks.map((t) =>
         t.id === taskId
           ? {
               ...t,
               subtasks: t.subtasks.map((st) =>
-                st.id === subtaskId ? { ...st, status, progress } : st
+                st.id === subtaskId ? { ...st, status, progress, ...extra } : st
               ),
             }
           : t
       ),
     })),
 
-  selectTask: (id) => set({ selectedTaskId: id }),
+  selectTask: (id) => set({ selectedTaskId: id, selectedSubtaskId: null }),
+  selectSubtask: (id) => set({ selectedSubtaskId: id }),
 }));

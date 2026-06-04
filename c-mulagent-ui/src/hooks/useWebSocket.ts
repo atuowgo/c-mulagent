@@ -6,6 +6,31 @@ import { useLogStore, type LogEntry } from '../stores/logStore';
 import { AgentState } from '../types/agent';
 import { TaskStatus } from '../types/task';
 
+function normalizeTaskStatus(raw: string): TaskStatus {
+  const mapping: Record<string, TaskStatus> = {
+    CREATED: TaskStatus.Pending,
+    READY: TaskStatus.Pending,
+    PENDING: TaskStatus.Pending,
+    RUNNING: TaskStatus.Running,
+    COMPLETED: TaskStatus.Done,
+    FAILED: TaskStatus.Failed,
+    CANCELLED: TaskStatus.Failed,
+  };
+  return mapping[raw] ?? TaskStatus.Pending;
+}
+
+function normalizeAgentState(raw: string): AgentState {
+  const mapping: Record<string, AgentState> = {
+    IDLE: AgentState.Idle,
+    PENDING: AgentState.Running,
+    RUNNING: AgentState.Running,
+    COMPLETED: AgentState.Done,
+    FAILED: AgentState.Error,
+    CANCELLED: AgentState.Error,
+  };
+  return mapping[raw] ?? AgentState.Idle;
+}
+
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<number>(0);
@@ -73,26 +98,40 @@ function dispatchEvent(event: AgentEvent) {
   const d = event.data || {};
 
   switch (event.type) {
-    case 'AGENT_STATE_CHANGED':
-      updateAgentState(
-        String(d.agentId || ''),
-        (String(d.state || '') as AgentState) || AgentState.Idle,
-        Number(d.progress) || 0,
-      );
+    case 'AGENT_STATE_CHANGED': {
+      const agentId = String(d.agentId || '');
+      const agentState = normalizeAgentState(String(d.state || ''));
+      const progress = Number(d.progress) || 0;
+      updateAgentState(agentId, agentState, progress);
+      addLog({
+        id: event.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        time: event.timestamp ? new Date(event.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString(),
+        level: agentState === AgentState.Error ? 'error' : 'info',
+        source: agentId,
+        message: `Agent state: ${agentState} (${d.state})`,
+      });
       break;
+    }
     case 'TASK_PROGRESS': {
       const subtaskId = d.subtaskId ? String(d.subtaskId) : undefined;
       if (subtaskId) {
+        const extra: Record<string, unknown> = {};
+        if (d.assignedAgent) extra.assignedAgent = String(d.assignedAgent);
+        if (d.outputLength !== undefined) extra.progress = 100;
+        if (d.error) extra.outputData = String(d.error);
+        if (d.retryCount !== undefined) extra.retryCount = Number(d.retryCount);
+        if (d.maxRetries !== undefined) extra.maxRetries = Number(d.maxRetries);
         updateSubtask(
           String(d.taskPlanId || ''),
           subtaskId,
-          (String(d.status || '') as TaskStatus) || TaskStatus.Pending,
+          normalizeTaskStatus(String(d.status || '')),
           Number(d.progress) || 0,
+          Object.keys(extra).length > 0 ? extra as Partial<import('../types/task').Subtask> : undefined,
         );
       } else {
         updateTask(
           String(d.taskPlanId || ''),
-          (String(d.status || '') as TaskStatus) || TaskStatus.Pending,
+          normalizeTaskStatus(String(d.status || '')),
           Number(d.progress) || 0,
         );
       }
